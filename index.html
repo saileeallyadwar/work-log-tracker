@@ -181,6 +181,7 @@ input:focus,textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 
 .co-row .use{font-size:13px;color:var(--muted);white-space:nowrap}
 .cur-pill{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:2px 8px;border-radius:999px;margin-left:8px}
 @media (max-width:560px){.co-row{grid-template-columns:minmax(0,1fr)}}
+[hidden]{display:none!important}
 #login{min-height:100vh;display:grid;place-items:center;padding:24px}
 #login .panel{width:100%;max-width:400px}
 #login h1{font-size:34px;font-weight:700;letter-spacing:-0.02em;margin-bottom:6px}
@@ -398,7 +399,16 @@ async function doAuth(kind){
   if(password.length<6){lgMsg("Password must be at least 6 characters.",true);return}
   lgMsg(kind==="up"?"Creating your account…":"Signing in…");
   const {data,error}=kind==="up"?await SB.auth.signUp({email,password}):await SB.auth.signInWithPassword({email,password});
-  if(error){lgMsg(error.message,true);return}
+  if(error){
+    const m=(error.message||"").toLowerCase();
+    lgMsg(m.includes("not confirmed")?"Your email isn\u2019t confirmed yet. Click the link in the confirmation email, or turn off \u201cConfirm email\u201d in Supabase (see the steps you were given) and try again."
+      :m.includes("invalid login")?"Wrong email or password. If you haven\u2019t made an account yet, click Create account."
+      :m.includes("already registered")?"An account with this email already exists. Click Sign in instead."
+      :m.includes("rate limit")||m.includes("security purposes")?"Too many attempts. Wait a minute and try again."
+      :error.message,true);
+    return;
+  }
+  try{localStorage.setItem("worklog-email",email)}catch(e){}
   if(kind==="up"&&!data.session)lgMsg("Account created. Check your email to confirm it, then sign in.");
 }
 async function signOut(){if(SB)await SB.auth.signOut()}
@@ -431,7 +441,8 @@ async function connect(){
     S.mode="local";loadLocal();S.loaded=true;setStatus();refresh(true);
     document.getElementById("setupBanner").hidden=false;return;
   }
-  SB=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
+  SB=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:"worklog-auth"}});
+  try{const em=localStorage.getItem("worklog-email");if(em)document.getElementById("lgEmail").value=em}catch(e){}
   document.getElementById("loginForm").addEventListener("submit",e=>{e.preventDefault();doAuth("in")});
   document.getElementById("lgUp").addEventListener("click",()=>doAuth("up"));
   document.getElementById("lgForgot").addEventListener("click",()=>doAuth("forgot"));
